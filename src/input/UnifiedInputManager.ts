@@ -21,10 +21,6 @@ export class UnifiedInputManager {
   private touchStartY = 0;
   private hasSwiped = false;
 
-  // Bound handlers stored so they can be removed on scene shutdown
-  private boundTouchStart!: (e: TouchEvent) => void;
-  private boundTouchMove!: (e: TouchEvent) => void;
-
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
   }
@@ -39,24 +35,18 @@ export class UnifiedInputManager {
       right: this.scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D),
     };
 
-    // Touch / swipe: document-level listeners so swipes work anywhere on screen,
-    // not just over the canvas. preventDefault() on every touchmove blocks browser
-    // scroll and rubber-band bounce. One swipe fires per finger-down; must lift
-    // to swipe again.
-    this.boundTouchStart = (e: TouchEvent) => {
-      const touch = e.changedTouches[0];
-      this.touchStartX = touch.clientX;
-      this.touchStartY = touch.clientY;
+    // Touch / swipe: canvas is full-screen so Phaser pointer events cover the
+    // entire viewport. One swipe fires per finger-down; must lift to swipe again.
+    this.scene.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      this.touchStartX = pointer.x;
+      this.touchStartY = pointer.y;
       this.hasSwiped = false;
-    };
+    });
 
-    this.boundTouchMove = (e: TouchEvent) => {
-      e.preventDefault(); // block scroll on every move, even after swipe fires
-      if (this.hasSwiped) return;
-
-      const touch = e.changedTouches[0];
-      const deltaX = touch.clientX - this.touchStartX;
-      const deltaY = touch.clientY - this.touchStartY;
+    this.scene.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+      if (!pointer.isDown || this.hasSwiped) return;
+      const deltaX = pointer.x - this.touchStartX;
+      const deltaY = pointer.y - this.touchStartY;
       const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
       if (distance < SWIPE_THRESHOLD) return;
@@ -68,13 +58,7 @@ export class UnifiedInputManager {
       }
 
       this.hasSwiped = true;
-    };
-
-    document.addEventListener("touchstart", this.boundTouchStart, { passive: true });
-    document.addEventListener("touchmove", this.boundTouchMove, { passive: false });
-
-    // Clean up when the scene shuts down (scene.restart also triggers shutdown)
-    this.scene.events.once("shutdown", () => this.destroy());
+    });
 
     // Gamepad: log when a controller is detected
     if (this.scene.input.gamepad) {
@@ -92,11 +76,6 @@ export class UnifiedInputManager {
   update() {
     this.pollKeyboard();
     this.pollGamepad();
-  }
-
-  destroy() {
-    document.removeEventListener("touchstart", this.boundTouchStart);
-    document.removeEventListener("touchmove", this.boundTouchMove);
   }
 
   private pollKeyboard() {

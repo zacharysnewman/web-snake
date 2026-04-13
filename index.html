@@ -12,25 +12,20 @@
       }
 
       html, body {
-        touch-action: none; /* block browser scroll/bounce on the whole page */
-        overflow: hidden;
+        width: 100%;
         height: 100%;
-      }
-
-      body {
+        overflow: hidden;
         background: #000;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 100vh;
       }
 
       #game-container {
-        position: relative;
+        width: 100%;
+        height: 100%;
       }
 
       canvas {
         display: block;
+        touch-action: none; /* full-screen canvas covers the viewport; block scroll here */
       }
     </style>
   </head>
