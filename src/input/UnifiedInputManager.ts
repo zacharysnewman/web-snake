@@ -35,8 +35,8 @@ export class UnifiedInputManager {
       right: this.scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D),
     };
 
-    // Touch / swipe: fire as soon as the distance threshold is met during a drag.
-    // After firing, reset the start point so a continued drag can trigger again.
+    // Touch / swipe: canvas is full-screen so Phaser pointer events cover the
+    // entire viewport. One swipe fires per finger-down; must lift to swipe again.
     this.scene.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       this.touchStartX = pointer.x;
       this.touchStartY = pointer.y;
