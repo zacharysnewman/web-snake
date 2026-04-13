@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { insertCoin, isHost, myPlayer, onPlayerJoin } from "playroomkit";
+import { GAME_VERSION } from "../version";
 
 const PLAYER_COLORS = [
   "#00ff88",
@@ -45,6 +46,15 @@ export class LobbyScene extends Phaser.Scene {
         fontFamily: "monospace",
       })
       .setOrigin(0.5);
+
+    // Version
+    this.add
+      .text(width / 2, height - 12, `v${GAME_VERSION}`, {
+        fontSize: "12px",
+        color: "#333355",
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5, 1);
 
     // Players heading
     this.add

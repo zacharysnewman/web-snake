@@ -19,6 +19,9 @@ export class UnifiedInputManager {
   private currentDirection: Direction = "RIGHT";
   private touchStartX = 0;
   private touchStartY = 0;
+  // Updated continuously on pointermove so fast swipes (no touchmove) still work
+  private touchCurrentX = 0;
+  private touchCurrentY = 0;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -34,18 +37,36 @@ export class UnifiedInputManager {
       right: this.scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D),
     };
 
-    // Touch / swipe: record start on pointerdown, evaluate on pointerup
+    // Touch / swipe: record start on pointerdown, track position on pointermove,
+    // evaluate on pointerup. pointermove tracking is a fallback for fast swipes
+    // where the browser may report the same coordinates on touchend as touchstart.
     this.scene.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       this.touchStartX = pointer.x;
       this.touchStartY = pointer.y;
+      this.touchCurrentX = pointer.x;
+      this.touchCurrentY = pointer.y;
+    });
+
+    this.scene.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+      if (pointer.isDown) {
+        this.touchCurrentX = pointer.x;
+        this.touchCurrentY = pointer.y;
+      }
     });
 
     this.scene.input.on("pointerup", (pointer: Phaser.Input.Pointer) => {
-      const deltaX = pointer.x - this.touchStartX;
-      const deltaY = pointer.y - this.touchStartY;
+      // Prefer the pointer's own up-coordinates; fall back to last pointermove
+      // position if the browser didn't update them (fast-swipe edge case).
+      const endX = pointer.x !== this.touchStartX ? pointer.x : this.touchCurrentX;
+      const endY = pointer.y !== this.touchStartY ? pointer.y : this.touchCurrentY;
+      const deltaX = endX - this.touchStartX;
+      const deltaY = endY - this.touchStartY;
       const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
-      if (distance < SWIPE_THRESHOLD) return;
+      if (distance < SWIPE_THRESHOLD) {
+        console.log(`[Input] Swipe ignored — distance ${distance.toFixed(1)}px < ${SWIPE_THRESHOLD}px threshold`);
+        return;
+      }
 
       if (Math.abs(deltaX) > Math.abs(deltaY)) {
         this.trySetDirection(deltaX > 0 ? "RIGHT" : "LEFT");
@@ -113,10 +134,14 @@ export class UnifiedInputManager {
 
   /** Validates the new direction and updates player state if accepted. */
   private trySetDirection(newDir: Direction) {
-    // Ignore if unchanged
-    if (newDir === this.currentDirection) return;
-    // Reject opposite direction (prevents instant self-collision)
-    if (newDir === OPPOSITE[this.currentDirection]) return;
+    if (newDir === this.currentDirection) {
+      console.log(`[Input] Swipe ignored — already moving ${newDir}`);
+      return;
+    }
+    if (newDir === OPPOSITE[this.currentDirection]) {
+      console.log(`[Input] Swipe ignored — ${newDir} is opposite of current ${this.currentDirection}`);
+      return;
+    }
 
     this.currentDirection = newDir;
     console.log(`[Input] Direction → ${newDir}`);
