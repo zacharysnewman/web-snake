@@ -171,7 +171,6 @@ private fitCamera() {
   // on the middle of your logical coordinates.
   this.cameras.main.centerOn(LOGICAL_W / 2, LOGICAL_H / 2);
 }
-}
 
   // ── Host initialisation ─────────────────────────────────────────────────────
 
