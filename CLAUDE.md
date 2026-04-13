@@ -9,7 +9,7 @@ The game version lives in `src/version.ts` as `GAME_VERSION` and is displayed on
 - `MINOR` — new features / milestones
 - `MAJOR` — breaking changes or full redesigns
 
-Current version: `0.5.6`
+Current version: `0.5.7`
 
 ## SPEC.md Maintenance
 

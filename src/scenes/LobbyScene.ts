@@ -113,12 +113,13 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   private fitCamera() {
-    const { width, height } = this.scale;
-    const zoom = Math.min(width / LOGICAL_W, height / LOGICAL_H);
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const zoom = Math.min(w / LOGICAL_W, h / LOGICAL_H);
     this.cameras.main.setZoom(zoom);
     this.cameras.main.setScroll(
-      -(width / zoom - LOGICAL_W) / 2,
-      -(height / zoom - LOGICAL_H) / 2
+      -(w / zoom - LOGICAL_W) / 2,
+      -(h / zoom - LOGICAL_H) / 2
     );
   }
 

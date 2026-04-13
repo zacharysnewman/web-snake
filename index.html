@@ -12,17 +12,21 @@
       }
 
       html, body {
-        width: 100%;
-        height: 100%;
+        margin: 0;
         overflow: hidden;
         background: #000;
-        touch-action: none; /* block scroll in letterbox areas too */
+        touch-action: none;
       }
 
+      /* Fixed positioning anchors the container to the visual viewport,
+         not the document scroll height — critical on mobile Safari where
+         height: 100% can exceed the visible area and produce scroll. */
       #game-container {
-        width: 100%;
-        height: 100%;
-        position: relative;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
       }
 
       canvas {
