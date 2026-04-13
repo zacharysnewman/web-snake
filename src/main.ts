@@ -8,9 +8,10 @@ const config: Phaser.Types.Core.GameConfig = {
   backgroundColor: "#0a0a1a",
   scene: [LobbyScene, GameScene],
   scale: {
-    mode: Phaser.Scale.RESIZE,
-    width: "100%",
-    height: "100%",
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    width: 640,   // 20-col grid (600px) + 20px margin each side
+    height: 570,  // header (70px) + 16-row grid (480px) + 20px bottom margin
   },
   input: {
     gamepad: true,
