@@ -159,20 +159,19 @@ export class GameScene extends Phaser.Scene {
 
   // ── Camera fit ──────────────────────────────────────────────────────────────
 
-  private fitCamera() {
-    // window.innerWidth/Height reliably gives the visual viewport in CSS px,
-    // unaffected by Phaser's internal scale state or DPR ambiguity.
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    const zoom = Math.min(w / LOGICAL_W, h / LOGICAL_H);
-    this.cameras.main.setZoom(zoom);
-    // scrollX/Y = world-space top-left of the camera view.
-    // Setting it so the logical area is centred in the physical viewport.
-    this.cameras.main.setScroll(
-      -(w / zoom - LOGICAL_W) / 2,
-      -(h / zoom - LOGICAL_H) / 2
-    );
-  }
+private fitCamera() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+
+  // 1. Calculate the zoom based on the window size vs your logical size
+  const zoom = Math.min(w / LOGICAL_W, h / LOGICAL_H);
+  this.cameras.main.setZoom(zoom);
+
+  // 2. Instead of complex scroll math, simply center the camera 
+  // on the middle of your logical coordinates.
+  this.cameras.main.centerOn(LOGICAL_W / 2, LOGICAL_H / 2);
+}
+}
 
   // ── Host initialisation ─────────────────────────────────────────────────────
 
