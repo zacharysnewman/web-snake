@@ -110,8 +110,9 @@ Playroom Kit's `insertCoin()` automatically provides a standardized lobby overla
 
 | Milestone | Goal |
 |---|---|
-| **1 — Environment & Lobby** | Set up Vite, Phaser, and Playroom `insertCoin()`. Get a basic canvas on screen and confirm multiple devices can connect to the room. |
-| **2 — Unified Input System** | Build the local client input manager. Implement and test Keyboard, Swipe (with deadzones/thresholds), and Gamepad detection logging to the console. |
-| **3 — Single-Player Host Logic** | Build the host loop. Implement grid movement based on incoming input state, food spawning, growing, and wall collisions for a single player. |
-| **4 — Multiplayer Sync & Interpolation** | Ensure the Host calculates movement for all players. Have clients render state accurately and smoothly tween between coordinates. |
-| **5 — Combat & UI** | Implement snake-on-snake collisions. Add Gamepad/Touch-friendly UI overlays for "Game Over" and "Play Again" states. |
+| **0 — CI/CD & GitHub Pages** ✅ Done | Configure GitHub Actions to build and deploy the Vite app to GitHub Pages on every push to `main`. Set the Vite `base` path to `/web-snake/` so assets resolve correctly under the Pages sub-path. |
+| **1 — Environment & Lobby** ✅ Done | Set up Vite, Phaser, and Playroom `insertCoin()`. Get a basic canvas on screen and confirm multiple devices can connect to the room. |
+| **2 — Unified Input System** ⬜ Pending | Build the local client input manager. Implement and test Keyboard, Swipe (with deadzones/thresholds), and Gamepad detection logging to the console. |
+| **3 — Single-Player Host Logic** ⬜ Pending | Build the host loop. Implement grid movement based on incoming input state, food spawning, growing, and wall collisions for a single player. |
+| **4 — Multiplayer Sync & Interpolation** ⬜ Pending | Ensure the Host calculates movement for all players. Have clients render state accurately and smoothly tween between coordinates. |
+| **5 — Combat & UI** ⬜ Pending | Implement snake-on-snake collisions. Add Gamepad/Touch-friendly UI overlays for "Game Over" and "Play Again" states. |
