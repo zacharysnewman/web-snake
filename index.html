@@ -11,13 +11,18 @@
         box-sizing: border-box;
       }
 
+      html, body {
+        touch-action: none; /* block browser scroll/bounce on the whole page */
+        overflow: hidden;
+        height: 100%;
+      }
+
       body {
         background: #000;
         display: flex;
         justify-content: center;
         align-items: center;
         min-height: 100vh;
-        overflow: hidden;
       }
 
       #game-container {
@@ -26,7 +31,6 @@
 
       canvas {
         display: block;
-        touch-action: none; /* prevent browser intercepting swipe gestures */
       }
     </style>
   </head>
