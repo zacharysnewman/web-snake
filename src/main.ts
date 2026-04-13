@@ -8,10 +8,10 @@ const config: Phaser.Types.Core.GameConfig = {
   backgroundColor: "#0a0a1a",
   scene: [LobbyScene, GameScene],
   scale: {
-    mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: 640,   // 20-col grid (600px) + 20px margin each side
-    height: 570,  // header (70px) + 16-row grid (480px) + 20px bottom margin
+    // Fill the entire viewport so touch events are captured everywhere,
+    // including above/below the game area.  Each scene zooms its camera
+    // to fit the logical 640×570 game space and centres it on screen.
+    mode: Phaser.Scale.RESIZE,
   },
   input: {
     gamepad: true,

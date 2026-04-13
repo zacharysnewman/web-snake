@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { isHost, myPlayer, getState, setState, onPlayerJoin } from "playroomkit";
 import { UnifiedInputManager } from "../input/UnifiedInputManager";
+import { LOGICAL_W, LOGICAL_H } from "../constants";
 
 // Grid configuration
 const GRID_COLS = 20;
@@ -83,9 +84,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
-    const { width, height } = this.scale;
+    const width = LOGICAL_W;
+    const height = LOGICAL_H;
 
-    // Center the grid horizontally
+    // Center the grid horizontally within the logical canvas
     this.gridOffsetX = Math.floor((width - GRID_COLS * CELL_SIZE) / 2);
 
     // Reset state on scene (re)create
@@ -148,6 +150,25 @@ export class GameScene extends Phaser.Scene {
     if (isHost()) {
       this.time.delayedCall(200, () => this.initHostState());
     }
+
+    // Fit the logical game area into the physical screen using camera zoom.
+    this.fitCamera();
+    this.scale.on("resize", this.fitCamera, this);
+    this.events.once("shutdown", () => this.scale.off("resize", this.fitCamera, this));
+  }
+
+  // ── Camera fit ──────────────────────────────────────────────────────────────
+
+  private fitCamera() {
+    const { width, height } = this.scale; // physical canvas pixels
+    const zoom = Math.min(width / LOGICAL_W, height / LOGICAL_H);
+    this.cameras.main.setZoom(zoom);
+    // Centre the logical area in the physical canvas via camera scroll.
+    // scrollX/Y is the world-space position of the camera's top-left corner.
+    this.cameras.main.setScroll(
+      -(width / zoom - LOGICAL_W) / 2,
+      -(height / zoom - LOGICAL_H) / 2
+    );
   }
 
   // ── Host initialisation ─────────────────────────────────────────────────────
@@ -363,7 +384,8 @@ export class GameScene extends Phaser.Scene {
 
   private showGameOverOverlay() {
     if (this.gameOverContainer) return;
-    const { width, height } = this.scale;
+    const width = LOGICAL_W;
+    const height = LOGICAL_H;
 
     const container = this.add.container(0, 0);
     this.gameOverContainer = container;
@@ -501,7 +523,7 @@ export class GameScene extends Phaser.Scene {
 
   private showYouDiedBanner() {
     if (this.youDiedContainer) return;
-    const { width } = this.scale;
+    const width = LOGICAL_W;
 
     const container = this.add.container(0, 0);
     this.youDiedContainer = container;
