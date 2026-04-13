@@ -114,5 +114,5 @@ Playroom Kit's `insertCoin()` automatically provides a standardized lobby overla
 | **1 — Environment & Lobby** ✅ Done | Set up Vite, Phaser, and Playroom `insertCoin()`. Get a basic canvas on screen and confirm multiple devices can connect to the room. |
 | **2 — Unified Input System** ✅ Done | Build the local client input manager. Implement and test Keyboard, Swipe (with deadzones/thresholds), and Gamepad detection logging to the console. |
 | **3 — Single-Player Host Logic** ✅ Done | Build the host loop. Implement grid movement based on incoming input state, food spawning, growing, and wall collisions for a single player. |
-| **4 — Multiplayer Sync & Interpolation** ⬜ Pending | Ensure the Host calculates movement for all players. Have clients render state accurately and smoothly tween between coordinates. |
-| **5 — Combat & UI** ⬜ Pending | Implement snake-on-snake collisions. Add Gamepad/Touch-friendly UI overlays for "Game Over" and "Play Again" states. |
+| **4 — Multiplayer Sync & Interpolation** ✅ Done | Ensure the Host calculates movement for all players. Have clients render state accurately and smoothly tween between coordinates. |
+| **5 — Combat & UI** ✅ Done | Implement snake-on-snake collisions. Add Gamepad/Touch-friendly UI overlays for "Game Over" and "Play Again" states. |
