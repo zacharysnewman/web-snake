@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { LobbyScene } from "./scenes/LobbyScene";
 import { GameScene } from "./scenes/GameScene";
+import { LOGICAL_W, LOGICAL_H } from "./constants";
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
