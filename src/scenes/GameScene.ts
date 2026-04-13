@@ -34,6 +34,25 @@ interface PlayroomPlayer {
   onQuit(cb: () => void): void;
 }
 
+// Per-player interpolation state: lerp between prevBody and currBody
+interface PlayerRenderState {
+  prevBody: Vec2[];
+  currBody: Vec2[];
+  lastUpdateTime: number;
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function bodiesEqual(a: Vec2[], b: Vec2[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].x !== b[i].x || a[i].y !== b[i].y) return false;
+  }
+  return true;
+}
+
 export class GameScene extends Phaser.Scene {
   private inputManager!: UnifiedInputManager;
   private players: PlayroomPlayer[] = [];
@@ -46,9 +65,18 @@ export class GameScene extends Phaser.Scene {
 
   private gridOffsetX = 0;
 
-  // Host-only: tracks the last direction that was actually processed per player
-  // to prevent 180° reversals across tick boundaries
+  // Host-only: tracks the last direction actually processed per player
   private lastProcessedDir: Record<string, Direction> = {};
+
+  // Interpolation: per-player render state
+  private renderStates: Record<string, PlayerRenderState> = {};
+
+  // Game-phase tracking
+  private previousGameState = "";
+  private gameOverContainer?: Phaser.GameObjects.Container;
+  private youDiedContainer?: Phaser.GameObjects.Container;
+  private isRestartPending = false;
+  private gamepadAWasDown = false;
 
   constructor() {
     super({ key: "GameScene" });
@@ -59,6 +87,14 @@ export class GameScene extends Phaser.Scene {
 
     // Center the grid horizontally
     this.gridOffsetX = Math.floor((width - GRID_COLS * CELL_SIZE) / 2);
+
+    // Reset state on scene (re)create
+    this.renderStates = {};
+    this.previousGameState = "";
+    this.isRestartPending = false;
+    this.gamepadAWasDown = false;
+    this.gameOverContainer = undefined;
+    this.youDiedContainer = undefined;
 
     // Background
     this.add.rectangle(0, 0, width, height, 0x0a0a1a).setOrigin(0, 0);
@@ -103,6 +139,7 @@ export class GameScene extends Phaser.Scene {
       }
       player.onQuit(() => {
         this.players = this.players.filter((existing) => existing.id !== p.id);
+        delete this.renderStates[p.id];
       });
     });
 
@@ -116,6 +153,7 @@ export class GameScene extends Phaser.Scene {
   // ── Host initialisation ─────────────────────────────────────────────────────
 
   private initHostState() {
+    this.isRestartPending = false;
     this.spawnFood();
 
     this.players.forEach((player, index) => {
@@ -141,8 +179,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnFood() {
-    const x = Math.floor(Math.random() * GRID_COLS);
-    const y = Math.floor(Math.random() * GRID_ROWS);
+    // Avoid spawning on any occupied cell
+    const occupied: Vec2[] = [];
+    this.players.forEach((p) => {
+      const body = p.getState("body") as Vec2[] | null;
+      if (body) occupied.push(...body);
+    });
+
+    let x = 0, y = 0;
+    let attempts = 0;
+    do {
+      x = Math.floor(Math.random() * GRID_COLS);
+      y = Math.floor(Math.random() * GRID_ROWS);
+      attempts++;
+    } while (occupied.some((seg) => seg.x === x && seg.y === y) && attempts < 50);
+
     setState("food", { x, y });
   }
 
@@ -152,8 +203,23 @@ export class GameScene extends Phaser.Scene {
     // All clients poll local input and push direction to Playroom
     this.inputManager.update();
 
-    // Only the host advances the physics simulation
-    if (isHost()) {
+    const gameState = (getState("gameState") as string) ?? "playing";
+
+    // Detect and respond to game-state transitions
+    if (gameState !== this.previousGameState) {
+      this.onGameStateChanged(gameState);
+      this.previousGameState = gameState;
+    }
+
+    // Gamepad A / Start button triggers "Play Again" on game-over screen
+    if (gameState === "game_over" && this.gameOverContainer) {
+      this.checkGamepadRestart();
+    } else {
+      this.gamepadAWasDown = false;
+    }
+
+    // Only the host advances the physics simulation while playing
+    if (gameState === "playing" && isHost()) {
       this.tickTimer += delta;
       if (this.tickTimer >= TICK_MS) {
         this.tickTimer -= TICK_MS;
@@ -163,6 +229,27 @@ export class GameScene extends Phaser.Scene {
 
     // Everyone renders from the authoritative Playroom state
     this.render();
+
+    // Show/hide "YOU DIED" spectator banner
+    this.updateYouDiedBanner(gameState);
+  }
+
+  // ── Game-state transition handler ───────────────────────────────────────────
+
+  private onGameStateChanged(newState: string) {
+    if (newState === "game_over") {
+      this.showGameOverOverlay();
+    } else if (newState === "playing") {
+      this.hideGameOverOverlay();
+      // Clear interpolation state so old positions don't carry over
+      this.renderStates = {};
+    } else if (newState === "restarting") {
+      // Host re-initialises game; clients wait for "playing" signal
+      if (isHost() && !this.isRestartPending) {
+        this.isRestartPending = true;
+        this.initHostState();
+      }
+    }
   }
 
   // ── Host physics tick ───────────────────────────────────────────────────────
@@ -170,6 +257,11 @@ export class GameScene extends Phaser.Scene {
   private hostTick() {
     const food = getState("food") as Vec2 | null;
 
+    type Move = { player: PlayroomPlayer; body: Vec2[]; newHead: Vec2 };
+    const moves: Move[] = [];
+    const deadThisTick = new Set<string>();
+
+    // ── Step 1: compute new heads, detect wall / self collisions ─────────────
     this.players.forEach((player) => {
       if (!player.getState("isAlive")) return;
 
@@ -183,7 +275,6 @@ export class GameScene extends Phaser.Scene {
       const actualDir = requestedDir === OPPOSITE[lastDir] ? lastDir : requestedDir;
       this.lastProcessedDir[player.id] = actualDir;
 
-      // Advance head one cell in the chosen direction
       const vec = DIR_VEC[actualDir];
       const newHead: Vec2 = { x: body[0].x + vec.x, y: body[0].y + vec.y };
 
@@ -194,30 +285,255 @@ export class GameScene extends Phaser.Scene {
         newHead.y < 0 ||
         newHead.y >= GRID_ROWS
       ) {
-        player.setState("isAlive", false);
+        deadThisTick.add(player.id);
         return;
       }
 
       // Self collision → die
       if (body.some((seg) => seg.x === newHead.x && seg.y === newHead.y)) {
-        player.setState("isAlive", false);
+        deadThisTick.add(player.id);
         return;
       }
 
+      moves.push({ player, body, newHead });
+    });
+
+    // ── Step 2: head-to-head collision — both players die ────────────────────
+    for (let i = 0; i < moves.length; i++) {
+      for (let j = i + 1; j < moves.length; j++) {
+        if (
+          !deadThisTick.has(moves[i].player.id) &&
+          !deadThisTick.has(moves[j].player.id) &&
+          moves[i].newHead.x === moves[j].newHead.x &&
+          moves[i].newHead.y === moves[j].newHead.y
+        ) {
+          deadThisTick.add(moves[i].player.id);
+          deadThisTick.add(moves[j].player.id);
+        }
+      }
+    }
+
+    // ── Step 3: head-to-body collision with OTHER snakes ─────────────────────
+    moves.forEach((move) => {
+      if (deadThisTick.has(move.player.id)) return;
+      this.players.forEach((other) => {
+        if (other.id === move.player.id) return;
+        if (!(other.getState("isAlive") as boolean)) return;
+        const otherBody = other.getState("body") as Vec2[] | null;
+        if (!otherBody) return;
+        if (otherBody.some((seg) => seg.x === move.newHead.x && seg.y === move.newHead.y)) {
+          deadThisTick.add(move.player.id);
+        }
+      });
+    });
+
+    // ── Step 4: commit deaths ────────────────────────────────────────────────
+    deadThisTick.forEach((id) => {
+      const p = this.players.find((p) => p.id === id);
+      p?.setState("isAlive", false);
+    });
+
+    // ── Step 5: apply movement for survivors ─────────────────────────────────
+    moves.forEach((move) => {
+      if (deadThisTick.has(move.player.id)) return;
+
       // Food collision → grow, respawn food, increment score
       let ate = false;
-      if (food && newHead.x === food.x && newHead.y === food.y) {
+      if (food && move.newHead.x === food.x && move.newHead.y === food.y) {
         ate = true;
-        const score = ((player.getState("score") as number) ?? 0) + 1;
-        player.setState("score", score);
+        const score = ((move.player.getState("score") as number) ?? 0) + 1;
+        move.player.setState("score", score);
         this.spawnFood();
       }
 
       // Build new body: prepend new head, pop tail only if no food was eaten
-      const newBody = [newHead, ...body];
+      const newBody = [move.newHead, ...move.body];
       if (!ate) newBody.pop();
-      player.setState("body", newBody);
+      move.player.setState("body", newBody);
     });
+
+    // ── Step 6: check if all players are dead → game over ────────────────────
+    const anyAlive = this.players.some((p) => p.getState("isAlive") as boolean);
+    if (!anyAlive && this.players.length > 0) {
+      setState("gameState", "game_over");
+    }
+  }
+
+  // ── Overlays ────────────────────────────────────────────────────────────────
+
+  private showGameOverOverlay() {
+    if (this.gameOverContainer) return;
+    const { width, height } = this.scale;
+
+    const container = this.add.container(0, 0);
+    this.gameOverContainer = container;
+
+    // Semi-transparent dim
+    const bg = this.add
+      .rectangle(0, 0, width, height, 0x000000, 0.8)
+      .setOrigin(0, 0)
+      .setInteractive(); // block clicks reaching the game beneath
+    container.add(bg);
+
+    // "GAME OVER" title
+    const title = this.add
+      .text(width / 2, height * 0.18, "GAME OVER", {
+        fontSize: "52px",
+        color: "#ff4466",
+        fontFamily: "monospace",
+        stroke: "#660022",
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5);
+    container.add(title);
+
+    // Pulsing animation on title
+    this.tweens.add({
+      targets: title,
+      scaleX: 1.06,
+      scaleY: 1.06,
+      duration: 700,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+
+    // Player scores, sorted descending
+    const myId = myPlayer()?.id;
+    const sorted = [...this.players].sort(
+      (a, b) =>
+        ((b.getState("score") as number) ?? 0) -
+        ((a.getState("score") as number) ?? 0)
+    );
+
+    sorted.forEach((player, i) => {
+      const score = (player.getState("score") as number) ?? 0;
+      const colorHex = (player.getState("color") as string) ?? "#00ff88";
+      const isMe = player.id === myId;
+      const medal = i === 0 ? "1st" : i === 1 ? "2nd" : i === 2 ? "3rd" : `${i + 1}th`;
+      const label = isMe ? `${medal}  YOU  ${score} pts` : `${medal}  Player ${i + 1}  ${score} pts`;
+
+      const row = this.add
+        .text(width / 2, height * 0.36 + i * 34, label, {
+          fontSize: "19px",
+          color: isMe ? "#ffffff" : colorHex,
+          fontFamily: "monospace",
+          stroke: isMe ? colorHex : "#000000",
+          strokeThickness: isMe ? 2 : 0,
+        })
+        .setOrigin(0.5);
+      container.add(row);
+    });
+
+    // ── PLAY AGAIN button ────────────────────────────────────────────────────
+    const btnY = height * 0.74;
+    const btnW = 260;
+    const btnH = 52;
+
+    const btnBg = this.add
+      .rectangle(width / 2, btnY, btnW, btnH, 0x006633, 1)
+      .setInteractive({ useHandCursor: true });
+    const btnText = this.add
+      .text(width / 2, btnY, "[ PLAY AGAIN ]", {
+        fontSize: "22px",
+        color: "#00ff88",
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5);
+
+    btnBg.on("pointerover", () => {
+      btnBg.setFillStyle(0x00aa55);
+      btnText.setColor("#ffffff");
+    });
+    btnBg.on("pointerout", () => {
+      btnBg.setFillStyle(0x006633);
+      btnText.setColor("#00ff88");
+    });
+    btnBg.on("pointerdown", () => this.requestRestart());
+
+    container.add(btnBg);
+    container.add(btnText);
+
+    // Hint text for gamepad / keyboard
+    const hint = this.add
+      .text(width / 2, btnY + 40, "or press  A / Start", {
+        fontSize: "13px",
+        color: "#555577",
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5);
+    container.add(hint);
+
+    // Blink effect on button to draw attention
+    this.tweens.add({
+      targets: btnBg,
+      alpha: 0.7,
+      duration: 600,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+  }
+
+  private hideGameOverOverlay() {
+    if (this.gameOverContainer) {
+      this.gameOverContainer.destroy();
+      this.gameOverContainer = undefined;
+    }
+  }
+
+  /** Show a small spectator banner when the local player is dead mid-game. */
+  private updateYouDiedBanner(gameState: string) {
+    const me = myPlayer();
+    if (!me) return;
+
+    const myAlive = me.getState("isAlive") as boolean;
+    const myHasBody = this.players.some((p) => p.id === me.id && me.getState("body"));
+    const shouldShow = myHasBody && !myAlive && gameState === "playing";
+
+    if (shouldShow && !this.youDiedContainer) {
+      this.showYouDiedBanner();
+    } else if (!shouldShow && this.youDiedContainer) {
+      this.youDiedContainer.destroy();
+      this.youDiedContainer = undefined;
+    }
+  }
+
+  private showYouDiedBanner() {
+    if (this.youDiedContainer) return;
+    const { width } = this.scale;
+
+    const container = this.add.container(0, 0);
+    this.youDiedContainer = container;
+
+    const banner = this.add
+      .text(width / 2, GRID_TOP - 2, "  YOU DIED — spectating  ", {
+        fontSize: "14px",
+        color: "#ff4466",
+        fontFamily: "monospace",
+        backgroundColor: "#220011bb",
+        padding: { x: 10, y: 4 },
+      })
+      .setOrigin(0.5, 1);
+    container.add(banner);
+  }
+
+  /** Pressing gamepad A (button 0) or Start (button 9) triggers restart. */
+  private checkGamepadRestart() {
+    const pad = this.input.gamepad?.getPad(0);
+    if (!pad) {
+      this.gamepadAWasDown = false;
+      return;
+    }
+    const isDown = !!(pad.buttons[0]?.pressed || pad.buttons[9]?.pressed);
+    if (isDown && !this.gamepadAWasDown) {
+      this.requestRestart();
+    }
+    this.gamepadAWasDown = isDown;
+  }
+
+  private requestRestart() {
+    setState("gameState", "restarting");
   }
 
   // ── Rendering ───────────────────────────────────────────────────────────────
@@ -254,8 +570,9 @@ export class GameScene extends Phaser.Scene {
 
     const ox = this.gridOffsetX;
     const oy = GRID_TOP;
+    const now = this.time.now;
 
-    // Draw food
+    // ── Food ─────────────────────────────────────────────────────────────────
     const food = getState("food") as Vec2 | null;
     if (food) {
       const fx = ox + food.x * CELL_SIZE + CELL_SIZE / 2;
@@ -264,41 +581,51 @@ export class GameScene extends Phaser.Scene {
       this.foodGraphics.fillCircle(fx, fy, CELL_SIZE / 2 - 4);
     }
 
-    // Draw all snakes
+    // ── Snakes (with interpolation) ──────────────────────────────────────────
     this.players.forEach((player) => {
       const body = player.getState("body") as Vec2[] | null;
-      if (!body) return;
+      if (!body || body.length === 0) return;
+
+      // Update render state when body changes
+      let rs = this.renderStates[player.id];
+      if (!rs) {
+        rs = { prevBody: body, currBody: body, lastUpdateTime: now };
+        this.renderStates[player.id] = rs;
+      } else if (!bodiesEqual(rs.currBody, body)) {
+        rs.prevBody = rs.currBody;
+        rs.currBody = body;
+        rs.lastUpdateTime = now;
+      }
+
+      // t = 0 at the moment of a tick update, 1 when the next tick is due
+      const t = Math.min((now - rs.lastUpdateTime) / TICK_MS, 1);
 
       const isAlive = player.getState("isAlive") as boolean;
       const colorHex = (player.getState("color") as string) ?? "#00ff88";
       const colorInt = parseInt(colorHex.replace("#", ""), 16);
 
-      body.forEach((seg, i) => {
-        const sx = ox + seg.x * CELL_SIZE;
-        const sy = oy + seg.y * CELL_SIZE;
+      rs.currBody.forEach((seg, i) => {
+        // Segments that didn't exist in prevBody (tail growth) snap to position
+        const prev = rs.prevBody[i] ?? seg;
+
+        const px = ox + lerp(prev.x, seg.x, t) * CELL_SIZE;
+        const py = oy + lerp(prev.y, seg.y, t) * CELL_SIZE;
 
         if (i === 0) {
           // Head: full cell, full brightness
           this.snakeGraphics.fillStyle(isAlive ? colorInt : 0x334433, 1);
-          this.snakeGraphics.fillRect(sx + 1, sy + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+          this.snakeGraphics.fillRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
         } else {
-          // Body: inset slightly, lower alpha
+          // Body: slightly inset, lower alpha
           this.snakeGraphics.fillStyle(isAlive ? colorInt : 0x222233, 0.6);
-          this.snakeGraphics.fillRect(sx + 3, sy + 3, CELL_SIZE - 6, CELL_SIZE - 6);
+          this.snakeGraphics.fillRect(px + 3, py + 3, CELL_SIZE - 6, CELL_SIZE - 6);
         }
       });
     });
 
-    // Update score / status text for the local player
+    // ── Score / status text ──────────────────────────────────────────────────
     const me = myPlayer();
     const myScore = (me?.getState("score") as number) ?? 0;
-    const myAlive = (me?.getState("isAlive") as boolean) ?? false;
-    const myBodySet = this.players.some((p) => p.id === me?.id && me?.getState("body"));
-
-    if (myBodySet && !myAlive) {
-      this.scoreText.setText(`Score: ${myScore}  —  GAME OVER`).setColor("#ff4466");
-    } else {
-      this.scoreText.setText(`Score: ${myScore}`).setColor("#aaaaaa");
-    }
+    this.scoreText.setText(`Score: ${myScore}`).setColor("#aaaaaa");
   }
 }
