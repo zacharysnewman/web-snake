@@ -19,6 +19,7 @@ export class UnifiedInputManager {
   private currentDirection: Direction = "RIGHT";
   private touchStartX = 0;
   private touchStartY = 0;
+  private hasSwiped = false;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -39,10 +40,11 @@ export class UnifiedInputManager {
     this.scene.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       this.touchStartX = pointer.x;
       this.touchStartY = pointer.y;
+      this.hasSwiped = false;
     });
 
     this.scene.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-      if (!pointer.isDown) return;
+      if (!pointer.isDown || this.hasSwiped) return;
       const deltaX = pointer.x - this.touchStartX;
       const deltaY = pointer.y - this.touchStartY;
       const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
@@ -55,9 +57,7 @@ export class UnifiedInputManager {
         this.trySetDirection(deltaY > 0 ? "DOWN" : "UP");
       }
 
-      // Reset origin so the next segment of the drag can fire a new swipe
-      this.touchStartX = pointer.x;
-      this.touchStartY = pointer.y;
+      this.hasSwiped = true;
     });
 
     // Gamepad: log when a controller is detected
