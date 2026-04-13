@@ -16,16 +16,18 @@
         height: 100%;
         overflow: hidden;
         background: #000;
+        touch-action: none; /* block scroll in letterbox areas too */
       }
 
       #game-container {
         width: 100%;
         height: 100%;
+        position: relative;
       }
 
       canvas {
         display: block;
-        touch-action: none; /* full-screen canvas covers the viewport; block scroll here */
+        touch-action: none;
       }
     </style>
   </head>
