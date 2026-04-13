@@ -14,6 +14,7 @@ export class LobbyScene extends Phaser.Scene {
   private statusText!: Phaser.GameObjects.Text;
   private playerTexts: Phaser.GameObjects.Text[] = [];
   private connectedPlayers: string[] = [];
+  private startButton?: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: "LobbyScene" });
@@ -71,6 +72,8 @@ export class LobbyScene extends Phaser.Scene {
       );
       this.statusText.setColor("#00ff88");
 
+      this.showStartButton();
+
       // Listen for players joining
       onPlayerJoin((player) => {
         const id = player.id;
@@ -91,6 +94,24 @@ export class LobbyScene extends Phaser.Scene {
       this.statusText.setText("Failed to connect to lobby.\nSee console.");
       this.statusText.setColor("#ff4444");
     }
+  }
+
+  private showStartButton() {
+    const { width, height } = this.scale;
+
+    this.startButton = this.add
+      .text(width / 2, height * 0.85, "[ START GAME ]", {
+        fontSize: "22px",
+        color: "#00ff88",
+        fontFamily: "monospace",
+        stroke: "#004422",
+        strokeThickness: 2,
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on("pointerover", () => this.startButton?.setColor("#ffffff"))
+      .on("pointerout", () => this.startButton?.setColor("#00ff88"))
+      .on("pointerdown", () => this.scene.start("GameScene"));
   }
 
   private refreshPlayerList() {
