@@ -162,15 +162,14 @@ export class GameScene extends Phaser.Scene {
 private fitCamera() {
   const w = window.innerWidth;
   const h = window.innerHeight;
-
-  // 1. Calculate the zoom based on the window size vs your logical size
   const zoom = Math.min(w / LOGICAL_W, h / LOGICAL_H);
+  
   this.cameras.main.setZoom(zoom);
-
-  // 2. Instead of complex scroll math, simply center the camera 
-  // on the middle of your logical coordinates.
+  
+  // Center the camera on the middle of your logical game area
   this.cameras.main.centerOn(LOGICAL_W / 2, LOGICAL_H / 2);
 }
+
 
   // ── Host initialisation ─────────────────────────────────────────────────────
 
