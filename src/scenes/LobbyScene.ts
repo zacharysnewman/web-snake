@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { insertCoin, isHost, myPlayer, onPlayerJoin } from "playroomkit";
 import { GAME_VERSION } from "../version";
+import { LOGICAL_W, LOGICAL_H } from "../constants";
 
 const PLAYER_COLORS = [
   "#00ff88",
@@ -22,7 +23,8 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   async create() {
-    const { width, height } = this.scale;
+    const width = LOGICAL_W;
+    const height = LOGICAL_H;
 
     // Background
     this.add.rectangle(0, 0, width, height, 0x0a0a1a).setOrigin(0, 0);
@@ -104,10 +106,25 @@ export class LobbyScene extends Phaser.Scene {
       this.statusText.setText("Failed to connect to lobby.\nSee console.");
       this.statusText.setColor("#ff4444");
     }
+
+    this.fitCamera();
+    this.scale.on("resize", this.fitCamera, this);
+    this.events.once("shutdown", () => this.scale.off("resize", this.fitCamera, this));
+  }
+
+  private fitCamera() {
+    const { width, height } = this.scale;
+    const zoom = Math.min(width / LOGICAL_W, height / LOGICAL_H);
+    this.cameras.main.setZoom(zoom);
+    this.cameras.main.setScroll(
+      -(width / zoom - LOGICAL_W) / 2,
+      -(height / zoom - LOGICAL_H) / 2
+    );
   }
 
   private showStartButton() {
-    const { width, height } = this.scale;
+    const width = LOGICAL_W;
+    const height = LOGICAL_H;
 
     this.startButton = this.add
       .text(width / 2, height * 0.85, "[ START GAME ]", {
@@ -129,8 +146,8 @@ export class LobbyScene extends Phaser.Scene {
     this.playerTexts.forEach((t) => t.destroy());
     this.playerTexts = [];
 
-    const { width, height } = this.scale;
-    const startY = height * 0.58;
+    const width = LOGICAL_W;
+    const startY = LOGICAL_H * 0.58;
 
     this.connectedPlayers.forEach((id, i) => {
       const label =
